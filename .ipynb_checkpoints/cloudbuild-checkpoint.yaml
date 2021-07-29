@@ -1,0 +1,91 @@
+steps:
+# Build the trainer image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_TRAINER_IMAGE_NAME:$TAG_NAME', '.']
+  dir: $_PIPELINE_FOLDER/docker_images/trainer_image
+  id: 'Build the trainer image'
+  
+# Build the transform image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_TRANSFORM_IMAGE_NAME:$TAG_NAME', '.']
+  dir: $_PIPELINE_FOLDER/docker_images/transform_image
+  id: 'Build the transform image'
+
+# Build the evaluate image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_EVALUATE_IMAGE_NAME:$TAG_NAME', '.']
+  dir: $_PIPELINE_FOLDER/docker_images/evaluate_image
+  id: 'Build the evaluate image'
+
+# Build the base image for lightweight components
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_BASE_IMAGE_NAME:$TAG_NAME', '.']
+  dir: $_PIPELINE_FOLDER/docker_images/base_image
+  id: 'Build the base image'
+  
+# Build the base image for lightweight components
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/kfp-cli:latest', '.']
+  dir: $_PIPELINE_FOLDER/docker_images/kfp-cli
+  id: 'Build the kfp-cli'
+
+# Compile the pipeline
+- name: 'gcr.io/$PROJECT_ID/kfp-cli'
+  args:
+  - '-c'
+  - |
+    dsl-compile --py $_PIPELINE_DSL --output $_PIPELINE_PACKAGE
+  env:
+  - 'BASE_IMAGE=gcr.io/$PROJECT_ID/$_BASE_IMAGE_NAME:$TAG_NAME'
+  - 'TRAINER_IMAGE=gcr.io/$PROJECT_ID/$_TRAINER_IMAGE_NAME:$TAG_NAME'
+  - 'TRANSFORM_IMAGE=gcr.io/$PROJECT_ID/$_TRANSFORM_IMAGE_NAME:$TAG_NAME'
+  - 'EVALUATE_IMAGE=gcr.io/$PROJECT_ID/$_EVALUATE_IMAGE_NAME:$TAG_NAME'
+  - 'RUNTIME_VERSION=$_RUNTIME_VERSION'
+  - 'PYTHON_VERSION=$_PYTHON_VERSION'
+  - 'COMPONENT_URL_SEARCH_PREFIX=$_COMPONENT_URL_SEARCH_PREFIX'
+  dir: $_PIPELINE_FOLDER/pipeline
+  id: 'Compile the Pipeline'
+  
+ # Upload the pipeline
+- name: 'gcr.io/$PROJECT_ID/kfp-cli'
+  args:
+  - '-c'
+  - |
+    kfp --endpoint $_ENDPOINT pipeline upload -p ${_PIPELINE_NAME}_$TAG_NAME $_PIPELINE_PACKAGE
+  dir: $_PIPELINE_FOLDER/pipeline
+  id: 'Upload the Pipeline'
+  
+ # Deploy the pipeline in KFP
+- name: 'gcr.io/$PROJECT_ID/kfp-cli'
+  args:
+  - '-c'
+  - |
+    kfp --endpoint $_ENDPOINT run submit \
+        -e $_EXPERIMENT_NAME \
+        -r $_RUN_ID \
+        -p `kfp --endpoint $_ENDPOINT pipeline list | grep -w ${_PIPELINE_NAME}_$TAG_NAME | grep -E -o -e "([a-z0-9]){8}-([a-z0-9]){4}-([a-z0-9]){4}-([a-z0-9]){4}-([a-z0-9]){12}"` \
+        project_id=$PROJECT_ID \
+        gcs_root=$_GCS_STAGING_PATH \
+        region=$_REGION \
+        source_table_name=$_SOURCE_TABLE \
+        num_epochs_hypertune=$_NUM_EPOCHS_HYPERTUNE \
+        num_epochs_retrain=$_NUM_EPOCHS_RETRAIN \
+        num_units=$_NUM_UNITS \
+        evaluation_metric_name=$_EVALUATION_METRIC \
+        evaluation_metric_threshold=$_EVALUATION_METRIC_THRESHOLD \
+        model_id=$_MODEL_ID \
+        version_id=$TAG_NAME \
+        replace_existing_version=$_REPLACE_EXISTING_VERSION
+  dir: $_PIPELINE_FOLDER/pipeline
+  id: 'Deploy and Run the Pipeline'
+  waitFor: ['Upload the Pipeline']
+
+# Push the images to Container Registry 
+images:
+- gcr.io/$PROJECT_ID/$_TRAINER_IMAGE_NAME:$TAG_NAME
+- gcr.io/$PROJECT_ID/$_TRANSFORM_IMAGE_NAME:$TAG_NAME
+- gcr.io/$PROJECT_ID/$_EVALUATE_IMAGE_NAME:$TAG_NAME
+- gcr.io/$PROJECT_ID/$_BASE_IMAGE_NAME:$TAG_NAME
+
+# Changing the timeout threshold
+timeout: 3600s

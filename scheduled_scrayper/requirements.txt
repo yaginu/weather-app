@@ -1,0 +1,5 @@
+requests==2.25.1
+beautifulsoup4==4.9.3
+google-api-python-client
+google-cloud-bigquery==2.23.1
+google-cloud-storage==1.41.1
