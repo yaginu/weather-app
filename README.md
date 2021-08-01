@@ -30,5 +30,10 @@ https://qiita.com/yagi615/items/ea9b150c578b863d0ac8
 	- Cloud Scheduler
 	- Pub/Sub
 
+# GCP(インフラ構成図)
+
+![icon](https://user-images.githubusercontent.com/58545149/127773821-71f2a27f-f9d0-48d7-9fd4-71b24563a16a.png)
+
+
 
 
