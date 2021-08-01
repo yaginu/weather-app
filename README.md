@@ -10,7 +10,8 @@ GitHubレポジトリへの新しいtagのpushをトリガーとして、モデ�
 
 # パイプラインの詳細
 
-Qiitaの記事を貼る
+こちらの記事に詳細を記しました。
+https://qiita.com/yagi615/items/ea9b150c578b863d0ac8
 
 # 使用技術
 
@@ -28,10 +29,6 @@ Qiitaの記事を貼る
 	- Cloud Functions
 	- Cloud Scheduler
 	- Pub/Sub
-
-# GCP(インフラ構成図)
-
-draw.ioで作成する
 
 
 
