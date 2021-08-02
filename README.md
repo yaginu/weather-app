@@ -32,7 +32,7 @@ https://qiita.com/yagi615/items/ea9b150c578b863d0ac8
 
 # GCP(インフラ構成図)
 
-!![icon](https://user-images.githubusercontent.com/58545149/127773973-cfe33263-6b28-419c-be2e-a197d723b7db.png)
+![icon](https://user-images.githubusercontent.com/58545149/127773973-cfe33263-6b28-419c-be2e-a197d723b7db.png)
 
 
 
