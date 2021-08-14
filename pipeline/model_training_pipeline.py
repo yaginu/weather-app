@@ -6,7 +6,8 @@ from kfp.components import func_to_container_op
 from kfp.gcp import use_gcp_secret
 
 from helper_components import retrieve_best_run
-from helper_components import evaluate_model
+from helper_components import set_default_version
+from compare_models import evaluate_model
 from preprocess_dataflow_pipeline import run_transformation_pipeline
 
 # Setting defaults
@@ -62,6 +63,8 @@ retrieve_best_run_op = func_to_container_op(
     retrieve_best_run, base_image=BASE_IMAGE)
 evaluate_model_op = func_to_container_op(
     evaluate_model, base_image=EVALUATE_IMAGE)
+set_default_model_op = func_to_container_op(
+    set_default_version, base_image=BASE_IMAGE)
 
         
 # Defining the pipeline
@@ -69,7 +72,8 @@ evaluate_model_op = func_to_container_op(
     name='Weather-forecast Model Training',
     description='The pipeline training and deploying the Weather-forecast pipeline'
 )
-def weather_forecast_train(project_id,
+def weather_forecast_train(
+        project_id,
         gcs_root,
         region,
         source_table_name,
@@ -134,16 +138,22 @@ def weather_forecast_train(project_id,
         master_image_uri=TRAINER_IMAGE,
         job_dir=job_dir,
         args=train_args).apply(use_gcp_secret())
+    
 
-    # Evaluatiing the model
+    # Evaluating the model
     eval_model = evaluate_model_op(
-        dataset_path=create_dataset.outputs['testing_file_path'],
-        model_path=str(train_model.outputs['job_dir']),
-        transform_artefacts_dir=create_dataset.outputs['transform_artefacts_dir'],
+        project_id=project_id,
+        model_id=model_id,
+        dataset_path=create_dataset.outputs["testing_file_path"],
+        model_path=str(train_model.outputs["job_dir"]),
         metric_name=evaluation_metric_name)
     
     # Deploying the model
-    with kfp.dsl.Condition(eval_model.outputs['metric_value'] < evaluation_metric_threshold):
+    with kfp.dsl.Condition(
+        eval_model.outputs['metric_value'] < eval_model.outputs['metric_value_default']
+            and eval_model.outputs['metric_value'] < evaluation_metric_threshold
+    ):
+
         model_uri = '{}/predict'.format(train_model.outputs["job_dir"])
 
         deploy_model = mlengine_deploy_op(
@@ -154,8 +164,14 @@ def weather_forecast_train(project_id,
             model = {"regions": [region],
     #                  "onlinePredictionLogging": True, # 同名のモデルがあると、デプロイ時にエラーが出るので、コメントアウトします。
                      "onlinePredictionConsoleLogging": True},
-            version = {"packageUris": ["gs://[your_bucket]/staging/dist/my_custom_code-0.1.tar.gz"], # change your code
+            version = {"packageUris": ["gs://intrepid-hour-320405-kubeflowpipelines-default/staging/dist/my_custom_code-0.1.tar.gz"],
                        "predictionClass": "predictor.MyPredictor"},
             runtime_version=RUNTIME_VERSION,
             python_version=PYTHON_VERSION,
             replace_existing_version=replace_existing_version)
+
+        # Changing the default model
+        change_default = set_default_model_op(
+            model_id=deploy_model.outputs["model_name"],
+            version_id=version_id
+        ).set_caching_options(enable_caching=False) # キャッシュを使うと上手くデフォルトが切り替わらないことがあります。
